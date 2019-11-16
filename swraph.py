@@ -3,6 +3,60 @@
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import paho.mqtt.publish as publish
 
+DESCRIPTIONS = {
+    "dateutc": "Date+Time (UTC)",
+    "model": "Weather Station Model (str)",
+    "stationtype": "Weather Station Firmware (string)",
+    "baromabsin": "Absolute Pressure (inHg)",
+    "baromrelin": "Relative Pressure (inHg)",
+    "dailyrainin": "Daily Rain (in)",
+    "eventrainin": "Event Rain (in)",
+    "humidity": "Outdoor Humidity (%)",
+    "humidityin": "Indoor Humidity (%)",
+    "monthlyrainin": "Monthly Rain (in)",
+    "rainratein": "Rate of rainfall (inches per hour)",
+    "solarradiation": "Solar Radiation (W/m^2)",
+    "tempf": "Outdoor Temperature (ºF)",
+    "tempinf": "Indoor Temperature (ºF)",
+    "totalrainin": "Total Rain (in, since last factory reset)",
+    "uv": "Ultra-Violet Radiation Index (int)",
+    "weeklyrainin": "Weekly Rain (in)",
+    "winddir": "Instantaneous Wind Direction (0-360°)",
+    "windgustmph": "Max Wind Speed In The Last 10 Minutes (mph)",
+    "windspeedmph": "Instantaneous Wind Speed (mph)",
+    "tempc": "CALC - Outdoor Temperature (ºC)",
+    "tempinc": "CALC - Indoor Temperature (ºC)",
+    "windgustkph": "CALC - Max Wind Speed In The Last 10 Minutes (kph)",
+    "windspeedkph": "CALC - Instantaneous Wind Speed (kph)",
+    "dailyrainmm": "CALC - Daily Rain (mm)",
+    "eventrainmm": "CALC - Event Rain (mm)",
+    "monthlyrainmm": "CALC - Monthly Rain (mm)",
+    "rainratemm": "CALC - Rate of rainfall (mm per hour)",
+    "weeklyrainmm": "CALC - Weekly Rain (mm)",
+    "baromabshpa": "CALC - Absolute Pressure (hPa)",
+    "baromrelhpa": "CALC - Relative Pressure (hPa)",
+}
+
+
+def far2cel(temp):
+    """Farenheit 2 Celcius."""
+    return round((float(temp) - 32) * 5 / 9, 1)
+
+
+def mph2kph(speed):
+    """Miles 2 Kilometers."""
+    return round(float(speed) * 1.609, 1)
+
+
+def in2mm(lenght):
+    """Inches 2 Millimeters."""
+    return round(float(lenght) * 25.4)
+
+
+def inhg2hpa(pressure):
+    """Inch of mercury 2 Hectopascal."""
+    return round(float(pressure) * 33.8639)
+
 
 def data2dict(data):
     """Wrapping the data into a dict."""
@@ -17,65 +71,40 @@ def data2dict(data):
     return datadict
 
 
-def far2cel(temp):
-    """Farenheit 2 Celcius."""
-    return round((float(temp) - 32) * 5 / 9, 1)
-
-
-def mph2kph(speed):
-    """Miles 2 Kilometers."""
-    return round(float(speed) * 1.609, 1)
-
-
-def send2mqtt(topic, data):
+def send2mqtt(topic, value, description):
     """Send stuff to MQTT"""
     broker = "127.0.0.1"
     try:
-        publish.single(topic, data, hostname=broker)
+        publish.single(topic, value, hostname=broker)
+        print(description + ":", value)
     except:
-        print("Sending data to MQTT broker failed...")
+        print("Failed sending", value, "to MQTT broker", broker, "on topic", topic)
 
 
 def parsedatadict(datadict):
-    """Parse the dict for meaningfull info."""
+    """Parse the dict, elevate with calculated data and forward to mqtt."""
     if datadict["model"] in "WS2900":
-        print("Date+Time (UTC):", datadict["dateutc"])
-        print("Weather Station Model (str):", datadict["model"])
-        print("Weather Station Firmware (string):", datadict["stationtype"])
-        print("Absolute Pressure (Hg):", datadict["baromabsin"])
-        print("Relative Pressure (Hg):", datadict["baromrelin"])
-        print("Daily Rain (in):", datadict["dailyrainin"])
-        print("Event Rain (in):", datadict["eventrainin"])
-        print("Outdoor Humidity (%):", datadict["humidity"])
-        print("Indoor Humidity (%):", datadict["humidityin"])
-        print("Monthly Rain (in):", datadict["monthlyrainin"])
-        print("Rate of rainfall (inches per hour):", datadict["rainratein"])
-        print("Solar Radiation (W/m^2):", datadict["solarradiation"])
-        print("Outdoor Temperature (ºF):", datadict["tempf"])
-        print("Indoor Temperature (ºF):", datadict["tempinf"])
-        print("Total Rain (in, since last factory reset):", datadict["totalrainin"])
-        print("Ultra-Violet Radiation Index (int):", datadict["uv"])
-        print("Weekly Rain (in):", datadict["weeklyrainin"])
-        print("Instantaneous Wind Direction (0-360°):", datadict["winddir"])
-        print("Max Wind Speed In The Last 10 Minutes (mph):", datadict["windgustmph"])
-        print("Instantaneous Wind Speed (mph):", datadict["windspeedmph"])
-
         datadict["tempc"] = far2cel(datadict["tempf"])
         datadict["tempinc"] = far2cel(datadict["tempinf"])
         datadict["windgustkph"] = mph2kph(datadict["windgustmph"])
         datadict["windspeedkph"] = mph2kph(datadict["windspeedmph"])
+        datadict["dailyrainmm"] = in2mm(datadict["dailyrainin"])
+        datadict["eventrainmm"] = in2mm(datadict["eventrainin"])
+        datadict["monthlyrainmm"] = in2mm(datadict["monthlyrainin"])
+        datadict["rainratemm"] = in2mm(datadict["rainratein"])
+        datadict["weeklyrainmm"] = in2mm(datadict["weeklyrainin"])
+        datadict["baromabshpa"] = inhg2hpa(datadict["baromabsin"])
+        datadict["baromrelhpa"] = inhg2hpa(datadict["baromrelin"])
 
-        print("CALC - Outdoor Temperature (ºC):", datadict["tempc"])
-        print("CALC - Indoor Temperature (ºC):", datadict["tempinc"])
-        print(
-            "CALC - Max Wind Speed In The Last 10 Minutes (kph):",
-            datadict["windgustkph"],
-        )
-        print("CALC - Instantaneous Wind Speed (kph):", datadict["windspeedkph"])
-
-        send2mqtt("home-assistant/weather/tempc", datadict["tempc"])
-        send2mqtt("home-assistant/weather/humidity", datadict["humidity"])
-        send2mqtt("home-assistant/weather/windspeedkph", datadict["windspeedkph"])
+        for mydata in datadict:
+            mykey = mydata
+            myval = datadict[mykey]
+            mqqttopic = "home-assistant/weather/" + mykey
+            try:
+                mydes = DESCRIPTIONS[mykey]
+            except:
+                mydes = "No description found for " + mykey
+            send2mqtt(mqqttopic, myval, mydes)
     else:
         print(datadict["model"], datadict["stationtype"], "is untested.")
     print("---------------------------------------------------------------")
