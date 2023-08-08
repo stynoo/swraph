@@ -1,4 +1,4 @@
-FROM alpine:latest
+FROM alpine:3.18.3
 
 LABEL description="SWRAPH : a dockerized weatherdata to mqtt implementation"
 LABEL maintainer="Stynoo"
